@@ -43,10 +43,6 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 }
 
                 var declarationsGroup = rulesetMatch.Groups["declarations"];
-                if (!declarationsGroup.Success)
-                {
-                    continue;
-                }
 
                 var selectorList = selectorListGroup.Value;
                 selectorList = selectorList.Trim(new[] { ' ', '\t', '\r', '\n' });
@@ -56,7 +52,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                     Value = rulesetGroup.Value,
                     SelectorList = selectorList,
                     DeclarationBlock = declarationBlockGroup.Value,
-                    Declarations = declarationsGroup.Value
+                    Declarations = declarationsGroup.Success ? declarationsGroup.Value : null
                 };
 
                 yield return ruleset;
@@ -328,6 +324,17 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 
                 if (removeRuleSet)
                 {
+                    resultContent = resultContent.Replace(ruleset.Value, "");
+                }
+            }
+
+
+            // clean up empty rulesets
+            var cleanupRulesets = GetRulesets(resultContent);
+            foreach (CssRuleset ruleset in cleanupRulesets)
+            {
+                var cleanedDeclaration = ruleset.Declarations.Trim(new[] { '\r', '\n', '\t', ' ' });
+                if (string.IsNullOrEmpty(cleanedDeclaration)) {
                     resultContent = resultContent.Replace(ruleset.Value, "");
                 }
             }
