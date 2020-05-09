@@ -1,104 +1,300 @@
 ﻿using StaticWebEpiserverPlugin.RequiredCssOnly.Interfaces;
+using StaticWebEpiserverPlugin.RequiredCssOnly.Models;
+using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Text.RegularExpressions;
+using static StaticWebEpiserverPlugin.RequiredCssOnly.Models.RequiredCssOnlyService;
 
 namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 {
-    public class RequiredCssOnlyService : IRequiredCssOnlyService
+    public partial class RequiredCssOnlyService : IRequiredCssOnlyService
     {
-        const string REGEX_FIND_ALL_STATEMENTS = @"(?<statement>(?<selectors>[a-zA-Z0-9.*+""^,:#_\-= \(\)\[\]>]+){(?<changesToApply>[^}|{]+)})";
+        const string REGEX_FIND_ALL_STATEMENTS = @"(?<ruleset>(?<selectorList>[^;{}]+)(?<declarationBlock>{(?<declarations>[^}{]+)}))";
         const string REGEX_FIND_SELECTORS = @"(?<selector>[^,]+)";
-        const string REGEX_FIND_SELECTOR_SECTION = @"(?<section>[#.]*(?>)[a-zA-Z0-9_\-]+)(?<states>[::](?>[a-zA-Z-(\[\])]+)*)*";
+        const string REGEX_FIND_SELECTOR_SECTION = @"(?<section>[^>~+|| ]+)";
+        const string REGEX_FIND_SELECTOR_SUB_SECTION = @"(?<section>[.#\[]{0,1}[^.#\[]+)";
+        const string REGEX_FIND_TYPE_SELECTOR = @"^([a-zA-Z])";
         const string REGEX_FIND_ID = @"id=[""|'](?<id>[^""|']+)[""|']";
         const string REGEX_FIND_CLASS = @"class=[""|'](?<classNames>[^""|']+)[""|']";
+
+        protected IEnumerable<CssRuleset> GetRulesets(string cssContent)
+        {
+            RegexOptions options = RegexOptions.Multiline;
+
+            var rulesetMatches = Regex.Matches(cssContent, REGEX_FIND_ALL_STATEMENTS, options);
+            foreach (Match rulesetMatch in rulesetMatches)
+            {
+                var rulesetGroup = rulesetMatch.Groups["ruleset"];
+                if (!rulesetGroup.Success)
+                {
+                    continue;
+                }
+                var selectorListGroup = rulesetMatch.Groups["selectorList"];
+                if (!selectorListGroup.Success)
+                {
+                    continue;
+                }
+
+                var declarationBlockGroup = rulesetMatch.Groups["declarationBlock"];
+                if (!declarationBlockGroup.Success)
+                {
+                    continue;
+                }
+
+                var declarationsGroup = rulesetMatch.Groups["declarations"];
+                if (!declarationsGroup.Success)
+                {
+                    continue;
+                }
+
+                var selectorList = selectorListGroup.Value;
+                selectorList = selectorList.Trim(new[] { ' ', '\t', '\r', '\n' });
+
+                CssRuleset ruleset = new CssRuleset()
+                {
+                    Value = rulesetGroup.Value,
+                    SelectorList = selectorList,
+                    DeclarationBlock = declarationBlockGroup.Value,
+                    Declarations = declarationsGroup.Value
+                };
+
+                yield return ruleset;
+            }
+        }
+
+        protected IEnumerable<string> GetSelectors(string cssSelectoList)
+        {
+            RegexOptions options = RegexOptions.Multiline;
+
+            var selectorMatches = Regex.Matches(cssSelectoList, REGEX_FIND_SELECTORS, options);
+            foreach (Match selectorMatch in selectorMatches)
+            {
+                var selectorGroup = selectorMatch.Groups["selector"];
+                if (!selectorGroup.Success)
+                {
+                    continue;
+                }
+
+                var selector = selectorGroup.Value;
+                selector = selector.Trim(new[] { ' ', '\t', '\r', '\n' });
+
+                // ignore at-rules
+                if (selector.StartsWith("@"))
+                {
+                    continue;
+                }
+
+                if (selector.Length > 0)
+                {
+                    var first = selector.First();
+                    switch (first)
+                    {
+                        case '0':
+                        case '1':
+                        case '2':
+                        case '3':
+                        case '4':
+                        case '5':
+                        case '6':
+                        case '7':
+                        case '8':
+                        case '9':
+                            // ignore, probably key frame...
+                            continue;
+                    }
+
+                    if (selector.Equals("from", System.StringComparison.OrdinalIgnoreCase)
+                        || selector.Equals("to", System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        // ignore, probably key frame...
+                        continue;
+                    }
+                }
+
+                yield return selector;
+            }
+        }
+
+        protected IEnumerable<CssSection> GetSections(string cssSelector)
+        {
+            RegexOptions options = RegexOptions.Multiline;
+
+            var sectionMatches = Regex.Matches(cssSelector, REGEX_FIND_SELECTOR_SECTION, options);
+            foreach (Match sectionMatch in sectionMatches)
+            {
+                var sectionGroup = sectionMatch.Groups["section"];
+                if (!sectionGroup.Success)
+                {
+                    continue;
+                }
+
+                var subSectionMatches = Regex.Matches(sectionGroup.Value, REGEX_FIND_SELECTOR_SUB_SECTION, options);
+                foreach (Match subSectionMatch in subSectionMatches)
+                {
+                    var subSectionGroup = subSectionMatch.Groups["section"];
+                    if (!subSectionGroup.Success)
+                    {
+                        continue;
+                    }
+
+                    yield return GetSection(subSectionGroup.Value);
+                }
+            }
+        }
+
+        private static CssSection GetSection(string section)
+        {
+            if (string.IsNullOrEmpty(section))
+                return null;
+
+            section = section.Trim(new[] { ' ', '\t', '\r', '\n' });
+
+            var pseudoElement = "";
+            var pseudoClass = "";
+
+            var pseudoElementIndex = section.IndexOf("::");
+            var pseudoClassIndex = section.IndexOf(":");
+
+            var hasPseudoElement = pseudoElementIndex != -1;
+            var hasPseudoClass = pseudoClassIndex != -1;
+
+            if (hasPseudoElement)
+            {
+                // Maybe we want to use this later, store it just in case
+                pseudoElement = section.Substring(pseudoElementIndex + 2);
+                section = section.Substring(0, pseudoElementIndex);
+            }
+            else if (hasPseudoClass)
+            {
+                // Maybe we want to use this later, store it just in case
+                pseudoClass = section.Substring(pseudoClassIndex + 1);
+                section = section.Substring(0, pseudoClassIndex);
+            }
+
+            // universal selector (*)
+            if (section.Contains("*"))
+            {
+                return new CssSection
+                {
+                    Type = CssSelectorType.UniversalSelector,
+                    Value = section
+                };
+            }
+
+            // class selector (.)
+            if (section.StartsWith("."))
+            {
+                var className = section.Substring(1);
+                return new CssSection
+                {
+                    Type = CssSelectorType.ClassSelector,
+                    Value = section.Substring(1)
+                };
+            }
+
+            // ID selector (#)
+            if (section.StartsWith("#"))
+            {
+                // id
+                var idName = section.Substring(1);
+                return new CssSection
+                {
+                    Type = CssSelectorType.IdSelector,
+                    Value = idName
+                };
+            }
+
+            // attribute selector ([])
+            if (section.StartsWith("["))
+            {
+                return new CssSection
+                {
+                    Type = CssSelectorType.AttributeSelector,
+                    Value = section
+                };
+            }
+
+            // type selector (element selector)
+            // NOTE: We will treat all selectors starting with chars as type selectors
+            if (Regex.IsMatch(section, REGEX_FIND_TYPE_SELECTOR))
+            {
+                return new CssSection
+                {
+                    Type = CssSelectorType.TypeSelector,
+                    Value = section
+                };
+            }
+
+            return new CssSection
+            {
+                Type = CssSelectorType.Unknown,
+                Value = section
+            };
+        }
 
         public string RemoveUnusedRules(string cssContent, string htmlContent)
         {
             string resultContent = cssContent;
 
-            RegexOptions options = RegexOptions.Multiline;
+            var rulesets = GetRulesets(cssContent);
 
-            var matchStatements = Regex.Matches(cssContent, REGEX_FIND_ALL_STATEMENTS, options);
-            foreach (Match statement in matchStatements)
+            foreach (CssRuleset ruleset in rulesets)
             {
-                var hasStatement = false;
-                var selectorsGroup = statement.Groups["selectors"];
-                if (!selectorsGroup.Success)
-                {
-                    continue;
-                }
+                var ignoreRuleSet = false;
+                var removeRuleSet = false;
+                var selectors = GetSelectors(ruleset.SelectorList);
+                var hasAnySelector = false;
 
-                var matchSelectors = Regex.Matches(selectorsGroup.Value, REGEX_FIND_SELECTORS);
-                foreach (Match selector in matchSelectors)
+                foreach (string selector in selectors)
                 {
                     var hasSelector = true;
-                    var selectorGroup = selector.Groups["selector"];
-                    if (!selectorGroup.Success)
+                    var sections = GetSections(selector);
+                    foreach (CssSection section in sections)
                     {
-                        // nothing todo here
-                        break;
-                    }
-
-                    var matchSections = Regex.Matches(selectorGroup.Value, REGEX_FIND_SELECTOR_SECTION);
-                    foreach (Match matchSection in matchSections)
-                    {
-                        var sectionGroup = matchSection.Groups["section"];
-                        if (!sectionGroup.Success)
+                        var hasSection = false;
+                        switch (section.Type)
                         {
-                            // nothing todo here
-                            break;
-                        }
-
-                        var section = sectionGroup.Value;
-                        if (string.IsNullOrEmpty(section))
-                        {
-                            // nothing todo here
-                            break;
-                        }
-
-                        /***
-                         * Special case logic for names with special meaning
-                         * class    = attribute
-                         * type     = attribute
-                         * from     = animation start rule
-                         * to       = animation end rule
-                         * 
-                         ***/
-                        if (section.Equals("class", System.StringComparison.OrdinalIgnoreCase)
-                            || section.Equals("type", System.StringComparison.OrdinalIgnoreCase)
-                            || section.Equals("from", System.StringComparison.OrdinalIgnoreCase)
-                            || section.Equals("to", System.StringComparison.OrdinalIgnoreCase)
-                            || section.Equals("font-face", System.StringComparison.OrdinalIgnoreCase))
-                        {
-                            hasSelector = true;
-                            break;
-                        }
-
-                        if (section.StartsWith("."))
-                        {
-                            var className = section.Substring(1);
-                            // class
-                            var matchClasses = Regex.Matches(htmlContent, REGEX_FIND_CLASS);
-                            if (!matchClasses.Cast<Match>().Select(match => match.Groups["classNames"]).Where(group => group.Success).Select(group => group.Value).Any(classNames => classNames.Contains(className)))
-                            {
-                                hasSelector = false;
+                            case CssSelectorType.Unknown:
+                                ignoreRuleSet = true;
                                 break;
-                            }
-                        }
-                        else if (section.StartsWith("#"))
-                        {
-                            // id
-                            var idName = section.Substring(1);
-                            var matchIds = Regex.Matches(htmlContent, REGEX_FIND_ID);
-                            if (!matchIds.Cast<Match>().Select(match => match.Groups["id"]).Where(group => group.Success).Select(group => group.Value).Any(id => id == idName))
-                            {
-                                hasSelector = false;
+                            case CssSelectorType.UniversalSelector:
+                                ignoreRuleSet = true;
                                 break;
-                            }
+                            case CssSelectorType.TypeSelector:
+                                if (HasElement(section.Value, htmlContent))
+                                {
+                                    hasSection = true;
+                                }
+                                break;
+                            case CssSelectorType.ClassSelector:
+                                if (HasCssClass(section.Value, htmlContent))
+                                {
+                                    hasSection = true;
+                                }
+                                break;
+                            case CssSelectorType.IdSelector:
+                                if (HasId(section.Value, htmlContent))
+                                {
+                                    hasSection = true;
+                                }
+                                break;
+                            case CssSelectorType.AttributeSelector:
+                                ignoreRuleSet = true;
+                                break;
+                            default:
+                                ignoreRuleSet = true;
+                                break;
                         }
-                        else if (htmlContent.IndexOf("<" + section) == -1)
+
+                        if (ignoreRuleSet)
                         {
-                            // element
+                            break;
+                        }
+
+                        // No match found, remove ruleset
+                        if (!hasSection)
+                        {
                             hasSelector = false;
                             break;
                         }
@@ -106,18 +302,46 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 
                     if (hasSelector)
                     {
-                        hasStatement = true;
+                        hasAnySelector = true;
+                    }
+
+                    if (ignoreRuleSet || removeRuleSet || hasSelector)
+                    {
                         break;
                     }
                 }
 
-                if (!hasStatement)
+                if (!hasAnySelector && !ignoreRuleSet)
                 {
-                    resultContent = resultContent.Replace(statement.Groups["statement"].Value, "");
+                    removeRuleSet = true;
+                }
+
+                if (removeRuleSet)
+                {
+                    resultContent = resultContent.Replace(ruleset.Value, "");
                 }
             }
 
             return resultContent;
+        }
+
+        private bool HasElement(string elementName, string htmlContent)
+        {
+            return (htmlContent.IndexOf("<" + elementName) != -1);
+        }
+
+        private bool HasId(string idName, string htmlContent)
+        {
+            // TODO: find all classes once, send them here and iterate instead
+            var matchIds = Regex.Matches(htmlContent, REGEX_FIND_ID);
+            return matchIds.Cast<Match>().Select(match => match.Groups["id"]).Where(group => group.Success).Select(group => group.Value).Any(id => id == idName);
+        }
+
+        private bool HasCssClass(string className, string htmlContent)
+        {
+            // TODO: find all classes once, send them here and iterate instead
+            var matchClasses = Regex.Matches(htmlContent, REGEX_FIND_CLASS);
+            return matchClasses.Cast<Match>().Select(match => match.Groups["classNames"]).Where(group => group.Success).Select(group => group.Value).Any(classNames => classNames.Contains(className));
         }
     }
 }
