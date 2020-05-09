@@ -79,12 +79,6 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 var selector = selectorGroup.Value;
                 selector = selector.Trim(new[] { ' ', '\t', '\r', '\n' });
 
-                // ignore at-rules
-                if (selector.StartsWith("@"))
-                {
-                    continue;
-                }
-
                 if (selector.Length > 0)
                 {
                     var first = selector.First();
@@ -207,6 +201,18 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                     Value = section
                 };
             }
+
+            // ignore at-rules
+            if (section.StartsWith("@"))
+            {
+                return new CssSection
+                {
+                    Type = CssSelectorType.Unknown,
+                    Value = section
+                };
+            }
+
+
 
             if (section.Equals("from", System.StringComparison.OrdinalIgnoreCase)
                 || section.Equals("to", System.StringComparison.OrdinalIgnoreCase))
