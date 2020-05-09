@@ -241,6 +241,9 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 
         public string RemoveUnusedRules(string cssContent, string htmlContent)
         {
+            var availableClasses = GetAvailableClassesFromHtml(htmlContent);
+            var availableIds = GetAvailableIdsFromHtml(htmlContent);
+
             string resultContent = cssContent;
 
             var rulesets = GetRulesets(cssContent);
@@ -274,13 +277,13 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                                 }
                                 break;
                             case CssSelectorType.ClassSelector:
-                                if (HasCssClass(section.Value, htmlContent))
+                                if (HasCssClass(section.Value, availableClasses))
                                 {
                                     hasSection = true;
                                 }
                                 break;
                             case CssSelectorType.IdSelector:
-                                if (HasId(section.Value, htmlContent))
+                                if (HasId(section.Value, availableIds))
                                 {
                                     hasSection = true;
                                 }
@@ -334,12 +337,28 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             foreach (CssRuleset ruleset in cleanupRulesets)
             {
                 var cleanedDeclaration = ruleset.Declarations.Trim(new[] { '\r', '\n', '\t', ' ' });
-                if (string.IsNullOrEmpty(cleanedDeclaration)) {
+                if (string.IsNullOrEmpty(cleanedDeclaration))
+                {
                     resultContent = resultContent.Replace(ruleset.Value, "");
                 }
             }
 
+            resultContent = resultContent.Replace("\r", "").Replace("\n", "").Replace("  ", "").Replace(": ", ":");
+
             return resultContent;
+        }
+
+        private static List<string> GetAvailableIdsFromHtml(string htmlContent)
+        {
+            var matchIds = Regex.Matches(htmlContent, REGEX_FIND_ID);
+            var availableIds = matchIds.Cast<Match>().Select(match => match.Groups["id"]).Where(group => group.Success).Select(group => group.Value).ToList();
+            return availableIds;
+        }
+
+        private static List<string> GetAvailableClassesFromHtml(string htmlContent)
+        {
+            var matchClasses = Regex.Matches(htmlContent, REGEX_FIND_CLASS);
+            return matchClasses.Cast<Match>().Select(match => match.Groups["classNames"]).Where(group => group.Success).Select(group => group.Value.Replace("&#32;", " ")).ToList();
         }
 
         private bool HasElement(string elementName, string htmlContent)
@@ -347,18 +366,14 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             return (htmlContent.IndexOf("<" + elementName) != -1);
         }
 
-        private bool HasId(string idName, string htmlContent)
+        private bool HasId(string idName, List<string> availableIds)
         {
-            // TODO: find all classes once, send them here and iterate instead
-            var matchIds = Regex.Matches(htmlContent, REGEX_FIND_ID);
-            return matchIds.Cast<Match>().Select(match => match.Groups["id"]).Where(group => group.Success).Select(group => group.Value).Any(id => id == idName);
+            return availableIds.Any(id => id == idName);
         }
 
-        private bool HasCssClass(string className, string htmlContent)
+        private bool HasCssClass(string className, List<string> availableClasses)
         {
-            // TODO: find all classes once, send them here and iterate instead
-            var matchClasses = Regex.Matches(htmlContent, REGEX_FIND_CLASS);
-            return matchClasses.Cast<Match>().Select(match => match.Groups["classNames"]).Where(group => group.Success).Select(group => group.Value).Any(classNames => classNames.Equals(className) || classNames.StartsWith(className + " ") || classNames.Contains(" " + className + " ") || classNames.EndsWith(" " + className));
+            return availableClasses.Any(classNames => classNames.Equals(className) || classNames.StartsWith(className + " ") || classNames.Contains(" " + className + " ") || classNames.EndsWith(" " + className));
         }
     }
 }
