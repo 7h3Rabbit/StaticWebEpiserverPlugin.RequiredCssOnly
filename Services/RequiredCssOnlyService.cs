@@ -103,13 +103,6 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                             // ignore, probably key frame...
                             continue;
                     }
-
-                    if (selector.Equals("from", System.StringComparison.OrdinalIgnoreCase)
-                        || selector.Equals("to", System.StringComparison.OrdinalIgnoreCase))
-                    {
-                        // ignore, probably key frame...
-                        continue;
-                    }
                 }
 
                 yield return selector;
@@ -211,6 +204,17 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 return new CssSection
                 {
                     Type = CssSelectorType.AttributeSelector,
+                    Value = section
+                };
+            }
+
+            if (section.Equals("from", System.StringComparison.OrdinalIgnoreCase)
+                || section.Equals("to", System.StringComparison.OrdinalIgnoreCase))
+            {
+                // This is probably keyframes, ignore them
+                return new CssSection
+                {
+                    Type = CssSelectorType.Unknown,
                     Value = section
                 };
             }
