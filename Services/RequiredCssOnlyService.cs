@@ -10,7 +10,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 {
     public partial class RequiredCssOnlyService : IRequiredCssOnlyService
     {
-        const string REGEX_FIND_ALL_STATEMENTS = @"(?<ruleset>(?<selectorList>[^;{}]+)(?<declarationBlock>{(?<declarations>[^}{]+)}))";
+        const string REGEX_FIND_ALL_STATEMENTS = @"(?<ruleset>(?<selectorList>[^;/{}]+)(?<declarationBlock>{(?<declarations>[^}{]+)}))";
         const string REGEX_FIND_SELECTORS = @"(?<selector>[^,]+)";
         const string REGEX_FIND_SELECTOR_SECTION = @"(?<section>[^>~+|| ]+)";
         const string REGEX_FIND_SELECTOR_SUB_SECTION = @"(?<section>[.#\[]{0,1}[^.#\[]+)";
@@ -341,7 +341,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
         {
             // TODO: find all classes once, send them here and iterate instead
             var matchClasses = Regex.Matches(htmlContent, REGEX_FIND_CLASS);
-            return matchClasses.Cast<Match>().Select(match => match.Groups["classNames"]).Where(group => group.Success).Select(group => group.Value).Any(classNames => classNames.Contains(className));
+            return matchClasses.Cast<Match>().Select(match => match.Groups["classNames"]).Where(group => group.Success).Select(group => group.Value).Any(classNames => classNames.Equals(className) || classNames.StartsWith(className + " ") || classNames.Contains(" " + className + " ") || classNames.EndsWith(" " + className));
         }
     }
 }
