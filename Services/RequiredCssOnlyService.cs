@@ -62,11 +62,13 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                          * type     = attribute
                          * from     = animation start rule
                          * to       = animation end rule
+                         * 
                          ***/
                         if (section.Equals("class", System.StringComparison.OrdinalIgnoreCase)
                             || section.Equals("type", System.StringComparison.OrdinalIgnoreCase)
                             || section.Equals("from", System.StringComparison.OrdinalIgnoreCase)
-                            || section.Equals("to", System.StringComparison.OrdinalIgnoreCase))
+                            || section.Equals("to", System.StringComparison.OrdinalIgnoreCase)
+                            || section.Equals("font-face", System.StringComparison.OrdinalIgnoreCase))
                         {
                             hasSelector = true;
                             break;
