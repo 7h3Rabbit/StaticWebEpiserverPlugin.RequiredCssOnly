@@ -76,26 +76,6 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 var selector = selectorGroup.Value;
                 selector = selector.Trim(new[] { ' ', '\t', '\r', '\n' });
 
-                if (selector.Length > 0)
-                {
-                    var first = selector.First();
-                    switch (first)
-                    {
-                        case '0':
-                        case '1':
-                        case '2':
-                        case '3':
-                        case '4':
-                        case '5':
-                        case '6':
-                        case '7':
-                        case '8':
-                        case '9':
-                            // ignore, probably key frame...
-                            continue;
-                    }
-                }
-
                 yield return selector;
             }
         }
@@ -255,9 +235,12 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             {
                 var ignoreRuleSet = false;
                 var removeRuleSet = false;
-                var selectors = GetSelectors(ruleset.SelectorList);
+                var selectors = GetSelectors(ruleset.SelectorList).ToList();
                 var hasAnySelector = false;
 
+                var selectorIndexsToRemove = new List<int>();
+
+                var selectorIndex = 0;
                 foreach (string selector in selectors)
                 {
                     var hasSelector = true;
@@ -316,11 +299,17 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                     {
                         hasAnySelector = true;
                     }
+                    else
+                    {
+                        selectorIndexsToRemove.Add(selectorIndex);
+                    }
 
                     if (ignoreRuleSet || removeRuleSet || hasSelector)
                     {
                         break;
                     }
+
+                    selectorIndex++;
                 }
 
                 if (!hasAnySelector && !ignoreRuleSet)
@@ -331,6 +320,28 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 if (removeRuleSet)
                 {
                     resultContent = resultContent.Replace(ruleset.Value, "");
+                }
+                else
+                {
+                    // remove one or more selectors only
+                    if (selectorIndexsToRemove.Count > 0)
+                    {
+                        selectorIndexsToRemove.Reverse();
+                        foreach (int index in selectorIndexsToRemove)
+                        {
+                            selectors.RemoveAt(index);
+                        }
+                        var onlyRequiredSelectors = string.Join(",", selectors);
+
+                        var selectorListIndex = ruleset.Value.IndexOf(ruleset.SelectorList);
+
+                        var newRuleSet = ruleset.Value.Remove(selectorListIndex, ruleset.SelectorList.Length);
+                        newRuleSet = newRuleSet.Insert(selectorListIndex, onlyRequiredSelectors);
+
+
+                        resultContent = resultContent.Replace(ruleset.Value, newRuleSet);
+
+                    }
                 }
             }
 
