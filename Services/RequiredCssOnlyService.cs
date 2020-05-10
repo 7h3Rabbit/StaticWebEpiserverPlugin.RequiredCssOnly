@@ -346,7 +346,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 }
             }
 
-            resultContent = resultContent.Replace("\r", "").Replace("\n", "").Replace("  ", "").Replace(": ", ":").Replace(" {", "{");
+            resultContent = resultContent.Replace("\r", "").Replace("\n", "").Replace("  ", "").Replace(": ", ":").Replace(" {", "{").Replace(" (", "(").Replace(", ", ",");
 
             return resultContent;
         }
