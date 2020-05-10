@@ -10,7 +10,8 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 {
     public partial class RequiredCssOnlyService : IRequiredCssOnlyService
     {
-        const string REGEX_FIND_ALL_STATEMENTS = @"(?<ruleset>(?<selectorList>[^;/{}]+)(?<declarationBlock>{(?<declarations>[^}{]+)}))";
+        const string REGEX_FIND_COMMENTS = @"(?<comment>\/\*.*\*\/)";
+        const string REGEX_FIND_ALL_STATEMENTS = @"(?<ruleset>(?<selectorList>[^;{}]+)(?<declarationBlock>{(?<declarations>[^}{]+)}))";
         const string REGEX_FIND_SELECTORS = @"(?<selector>[^,]+)";
         const string REGEX_FIND_SELECTOR_SECTION = @"(?<section>[^>~+|| ]+)";
         const string REGEX_FIND_SELECTOR_SUB_SECTION = @"(?<section>[.#\[]{0,1}[^.#\[]+)";
@@ -246,6 +247,8 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 
             string resultContent = cssContent;
 
+            resultContent = RemoveComments(resultContent);
+
             var rulesets = GetRulesets(cssContent);
 
             foreach (CssRuleset ruleset in rulesets)
@@ -265,10 +268,10 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                         switch (section.Type)
                         {
                             case CssSelectorType.Unknown:
-                                ignoreRuleSet = true;
+                                hasSection = true;
                                 break;
                             case CssSelectorType.UniversalSelector:
-                                ignoreRuleSet = true;
+                                hasSection = true;
                                 break;
                             case CssSelectorType.TypeSelector:
                                 if (HasElement(section.Value, htmlContent))
@@ -289,7 +292,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                                 }
                                 break;
                             case CssSelectorType.AttributeSelector:
-                                ignoreRuleSet = true;
+                                hasSection = true;
                                 break;
                             default:
                                 ignoreRuleSet = true;
@@ -344,6 +347,22 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             }
 
             resultContent = resultContent.Replace("\r", "").Replace("\n", "").Replace("  ", "").Replace(": ", ":").Replace(" {", "{");
+
+            return resultContent;
+        }
+
+        private static string RemoveComments(string resultContent)
+        {
+            RegexOptions options = RegexOptions.Multiline;
+            var commentMatches = Regex.Matches(resultContent, REGEX_FIND_COMMENTS, options);
+            foreach (Match commentMatch in commentMatches)
+            {
+                var commentGroup = commentMatch.Groups["comment"];
+                if (commentGroup.Success)
+                {
+                    resultContent = resultContent.Replace(commentGroup.Value, "");
+                }
+            }
 
             return resultContent;
         }
