@@ -304,7 +304,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                         selectorIndexsToRemove.Add(selectorIndex);
                     }
 
-                    if (ignoreRuleSet || removeRuleSet || hasSelector)
+                    if (ignoreRuleSet || removeRuleSet)
                     {
                         break;
                     }
