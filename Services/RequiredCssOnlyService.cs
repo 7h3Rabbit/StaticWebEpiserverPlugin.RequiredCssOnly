@@ -10,7 +10,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 {
     public partial class RequiredCssOnlyService : IRequiredCssOnlyService
     {
-        const string REGEX_FIND_COMMENTS = @"(?<comment>\/\*.*\*\/)";
+        const string REGEX_FIND_COMMENTS = @"(?<comment>\/\*[^*]*\*+([^\/*][^*]*\*+)*\/)";
         const string REGEX_FIND_ALL_STATEMENTS = @"(?<ruleset>(?<selectorList>[^;{}]+)(?<declarationBlock>{(?<declarations>[^}{]+)}))";
         const string REGEX_FIND_SELECTORS = @"(?<selector>[^,]+)";
         const string REGEX_FIND_SELECTOR_SECTION = @"(?<section>[^>~+|| ]+)";
