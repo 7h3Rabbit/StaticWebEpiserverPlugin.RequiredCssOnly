@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text.RegularExpressions;
-using static StaticWebEpiserverPlugin.RequiredCssOnly.Models.RequiredCssOnlyService;
 
 namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 {
@@ -14,7 +13,6 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
         const string REGEX_FIND_ALL_STATEMENTS = @"(?<ruleset>(?<selectorList>[^;{}]+)(?<declarationBlock>{(?<declarations>[^}{]+)}))";
         const string REGEX_FIND_SELECTORS = @"(?<selector>[^,]+)";
         const string REGEX_FIND_SELECTOR_SECTION = @"(?<section>[^>~+|| ]+)";
-        //const string REGEX_FIND_SELECTOR_SECTION = @"(?<section>(?>[^>~+|| \[\(\""]*)(?>[\[\(\""]+[^\]\)]+[\]\)\""]+(?>[^>~+|| \[\(\""]*))*)";
         const string REGEX_FIND_SELECTOR_SUB_SECTION = @"(?<section>[.#\[]{0,1}[^.#\[]+)";
         const string REGEX_FIND_TYPE_SELECTOR = @"^([a-zA-Z])";
         const string REGEX_FIND_TAGNAME = @"<(?<tagName>[^>| |\/]+)";
@@ -244,15 +242,11 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                         var ruleset = content as ContentRuleset;
                         var contentLength = ruleset.EndIndex - ruleset.StartIndex;
                         resultContent = resultContent.Remove(ruleset.StartIndex, contentLength).Insert(ruleset.StartIndex, "{}".PadRight(contentLength - 2));
-                        //resultContent = resultContent.Remove(ruleset.StartIndex, ruleset.EndIndex - ruleset.StartIndex).Insert(ruleset.StartIndex, "{}");
-                        //resultContent = resultContent.Replace(ruleset.Content, "{}");
                     }
                 }
             }
 
             resultContent = resultContent.Replace("\r", "").Replace("\n", "").Replace("  ", "").Replace(": ", ":").Replace(" {", "{").Replace(" (", "(").Replace(", ", ",").Replace(" + ", "+");
-
-            //resultContent = resultContent.Replace("{}{}", "{}");
 
             resultContent = RemoveEmptyRulesets(resultContent);
 
@@ -335,17 +329,6 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 // Ignore everything that is not a ruleset, for example comments
                 return;
             }
-
-            // TODO: If ruleset.Parts is not null/empty, make sure we loop all of them as well
-            // TOOD: make logic inside of this foreach a seperate function (so it can be called recursive)
-
-            //if (ruleset.Parts != null && ruleset.Parts.Count > 0)
-            //{
-            //    foreach (var subPart in ruleset.Parts)
-            //    {
-            //        GetIgnoreableRules(availableClasses, availableIds, availableTags, ignoreableRulesets, subPart);
-            //    }
-            //}
 
             var selectorList = ruleset.SelectorList;
 
@@ -434,92 +417,44 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             }
         }
 
-        private void GetRulesets(string resultContent, ref List<ContentPart> parts)
+        protected void GetRulesets(string cssContent, ref List<ContentPart> parts)
         {
-            int startIndex = 0;
-            int prevStartIndex = 0;
-            var parentStartIndex = -1;
-            var isDirty = true;
-            List<ContentRuleset> childParts = new List<ContentRuleset>();
+            RegexOptions options = RegexOptions.Multiline;
 
-            while (isDirty)
+            var rulesetMatches = Regex.Matches(cssContent, REGEX_FIND_ALL_STATEMENTS, options);
+            foreach (Match rulesetMatch in rulesetMatches)
             {
-                isDirty = false;
-                startIndex = resultContent.IndexOf("{", startIndex);
-                if (startIndex != -1)
+                var rulesetGroup = rulesetMatch.Groups["ruleset"];
+                if (!rulesetGroup.Success)
                 {
-                    var endIndex = resultContent.IndexOf("}", startIndex + 1) + 1;
-                    var nextStartIndex = resultContent.IndexOf("{", startIndex + 1);
-
-                    if (nextStartIndex != -1 && nextStartIndex < endIndex)
-                    {
-                        // We have identified nested block, fix this
-                        parentStartIndex = prevStartIndex;
-                        prevStartIndex = startIndex + 1;
-                        startIndex = nextStartIndex;
-                        isDirty = true;
-                        continue;
-                    }
-
-                    var content = resultContent.Substring(startIndex, endIndex - startIndex);
-                    var selectorList = resultContent.Substring(prevStartIndex, startIndex - prevStartIndex);
-
-                    if (parentStartIndex == -1)
-                    {
-                        var part = new ContentRuleset
-                        {
-                            StartIndex = startIndex,
-                            EndIndex = endIndex,
-                            SelectorList = selectorList,
-                            Content = content,
-                            Type = PartType.Block
-                        };
-
-                        if (parentStartIndex == -1 && childParts.Count > 0)
-                        {
-                            part.Parts = childParts;
-                            childParts = new List<ContentRuleset>();
-                        }
-
-                        parts.Add(part);
-                    }
-                    else
-                    {
-                        childParts.Add(new ContentRuleset
-                        {
-                            StartIndex = startIndex,
-                            EndIndex = endIndex,
-                            SelectorList = selectorList,
-                            Content = content,
-                            Type = PartType.Block
-                        });
-                    }
-
-                    var rulesetContent = selectorList + content;
-                    var length = rulesetContent.Length;
-                    //resultContent = resultContent.Replace(content, "".PadRight(length));
-                    resultContent = resultContent.Replace(rulesetContent, "".PadRight(length));
-
-                    //resultContent = resultContent.Replace(selectorList +  , startIndex - prevStartIndex).Trim();
-
-
-                    var nextEndIndex = resultContent.IndexOf("}", endIndex);
-                    if (nextEndIndex < nextStartIndex)
-                    {
-                        // We have reached end of parent block, restart from begining
-                        isDirty = true;
-                        prevStartIndex = parentStartIndex;
-                        startIndex = parentStartIndex;
-                        parentStartIndex = -1;
-                        continue;
-                    }
-
-
-                    isDirty = true;
-                    prevStartIndex = startIndex;
-                    startIndex = endIndex;
+                    continue;
+                }
+                var selectorListGroup = rulesetMatch.Groups["selectorList"];
+                if (!selectorListGroup.Success)
+                {
+                    continue;
                 }
 
+                var declarationBlockGroup = rulesetMatch.Groups["declarationBlock"];
+                if (!declarationBlockGroup.Success)
+                {
+                    continue;
+                }
+
+                var declarationsGroup = rulesetMatch.Groups["declarations"];
+
+                var selectorList = selectorListGroup.Value;
+
+                var part = new ContentRuleset
+                {
+                    StartIndex = rulesetGroup.Index,
+                    EndIndex = rulesetGroup.Index + rulesetGroup.Length,
+                    SelectorList = selectorList,
+                    Content = rulesetGroup.Value,
+                    Type = PartType.Block
+                };
+
+                parts.Add(part);
             }
         }
 
@@ -549,17 +484,6 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 }
 
             }
-
-            //RegexOptions options = RegexOptions.Multiline;
-            //var commentMatches = Regex.Matches(resultContent, REGEX_FIND_COMMENTS, options);
-            //foreach (Match commentMatch in commentMatches)
-            //{
-            //    var commentGroup = commentMatch.Groups["comment"];
-            //    if (commentGroup.Success)
-            //    {
-            //        resultContent = resultContent.Replace(commentGroup.Value, "");
-            //    }
-            //}
 
             return resultContent;
         }
