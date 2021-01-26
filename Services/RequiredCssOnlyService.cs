@@ -14,54 +14,16 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
         const string REGEX_FIND_ALL_STATEMENTS = @"(?<ruleset>(?<selectorList>[^;{}]+)(?<declarationBlock>{(?<declarations>[^}{]+)}))";
         const string REGEX_FIND_SELECTORS = @"(?<selector>[^,]+)";
         const string REGEX_FIND_SELECTOR_SECTION = @"(?<section>[^>~+|| ]+)";
+        //const string REGEX_FIND_SELECTOR_SECTION = @"(?<section>(?>[^>~+|| \[\(\""]*)(?>[\[\(\""]+[^\]\)]+[\]\)\""]+(?>[^>~+|| \[\(\""]*))*)";
         const string REGEX_FIND_SELECTOR_SUB_SECTION = @"(?<section>[.#\[]{0,1}[^.#\[]+)";
         const string REGEX_FIND_TYPE_SELECTOR = @"^([a-zA-Z])";
+        const string REGEX_FIND_TAGNAME = @"<(?<tagName>[^>| |\/]+)";
         const string REGEX_FIND_ID = @"id=[""|'](?<id>[^""|']+)[""|']";
         const string REGEX_FIND_CLASS = @"class=[""|'](?<classNames>[^""|']+)[""|']";
 
-        protected IEnumerable<CssRuleset> GetRulesets(string cssContent)
+        protected List<ContentSelector> GetSelectors(string cssSelectoList)
         {
-            RegexOptions options = RegexOptions.Multiline;
-
-            var rulesetMatches = Regex.Matches(cssContent, REGEX_FIND_ALL_STATEMENTS, options);
-            foreach (Match rulesetMatch in rulesetMatches)
-            {
-                var rulesetGroup = rulesetMatch.Groups["ruleset"];
-                if (!rulesetGroup.Success)
-                {
-                    continue;
-                }
-                var selectorListGroup = rulesetMatch.Groups["selectorList"];
-                if (!selectorListGroup.Success)
-                {
-                    continue;
-                }
-
-                var declarationBlockGroup = rulesetMatch.Groups["declarationBlock"];
-                if (!declarationBlockGroup.Success)
-                {
-                    continue;
-                }
-
-                var declarationsGroup = rulesetMatch.Groups["declarations"];
-
-                var selectorList = selectorListGroup.Value;
-                selectorList = selectorList.Trim(new[] { ' ', '\t', '\r', '\n' });
-
-                CssRuleset ruleset = new CssRuleset()
-                {
-                    Value = rulesetGroup.Value,
-                    SelectorList = selectorList,
-                    DeclarationBlock = declarationBlockGroup.Value,
-                    Declarations = declarationsGroup.Success ? declarationsGroup.Value : null
-                };
-
-                yield return ruleset;
-            }
-        }
-
-        protected IEnumerable<string> GetSelectors(string cssSelectoList)
-        {
+            List<ContentSelector> selectors = new List<ContentSelector>();
             RegexOptions options = RegexOptions.Multiline;
 
             var selectorMatches = Regex.Matches(cssSelectoList, REGEX_FIND_SELECTORS, options);
@@ -73,18 +35,28 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                     continue;
                 }
 
-                var selector = selectorGroup.Value;
-                selector = selector.Trim(new[] { ' ', '\t', '\r', '\n' });
+                var selectorValue = selectorGroup.Value;
+                var cleanedSelectorValue = selectorValue.Trim(new[] { ' ', '\t', '\r', '\n' });
 
-                yield return selector;
+                selectors.Add(new ContentSelector
+                {
+                    Content = selectorValue,
+                    CleanedContent = cleanedSelectorValue,
+                    StartIndex = selectorGroup.Index,
+                    EndIndex = selectorGroup.Length + selectorGroup.Index,
+                    Type = PartType.Selector
+                });
             }
+
+            return selectors;
         }
 
-        protected IEnumerable<CssSection> GetSections(string cssSelector)
+        protected void GetSections(ContentSelector selector)
         {
             RegexOptions options = RegexOptions.Multiline;
 
-            var sectionMatches = Regex.Matches(cssSelector, REGEX_FIND_SELECTOR_SECTION, options);
+            var index = 0;
+            var sectionMatches = Regex.Matches(selector.CleanedContent, REGEX_FIND_SELECTOR_SECTION, options);
             foreach (Match sectionMatch in sectionMatches)
             {
                 var sectionGroup = sectionMatch.Groups["section"];
@@ -102,16 +74,18 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                         continue;
                     }
 
-                    yield return GetSection(subSectionGroup.Value);
+                    if (string.IsNullOrEmpty(subSectionGroup.Value))
+                        continue;
+
+                    var section = GetSection(subSectionGroup.Value, index);
+                    selector.Sections.Add(section);
                 }
             }
         }
 
-        private static CssSection GetSection(string section)
+        private static ContentSection GetSection(string section, int index)
         {
-            if (string.IsNullOrEmpty(section))
-                return null;
-
+            var orginnalSection = section;
             section = section.Trim(new[] { ' ', '\t', '\r', '\n' });
 
             var pseudoElement = "";
@@ -139,10 +113,13 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             // universal selector (*)
             if (section.Contains("*"))
             {
-                return new CssSection
+                // CssSelectorType.UniversalSelector
+                return new ContentSection
                 {
-                    Type = CssSelectorType.UniversalSelector,
-                    Value = section
+                    Content = orginnalSection,
+                    CleanedContent = section,
+                    Index = index,
+                    Type = CssSelectorType.UniversalSelector
                 };
             }
 
@@ -150,10 +127,13 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             if (section.StartsWith("."))
             {
                 var className = section.Substring(1);
-                return new CssSection
+                // CssSelectorType.ClassSelector,
+                return new ContentSection
                 {
-                    Type = CssSelectorType.ClassSelector,
-                    Value = section.Substring(1)
+                    Content = orginnalSection,
+                    CleanedContent = section.Substring(1),
+                    Index = index,
+                    Type = CssSelectorType.ClassSelector
                 };
             }
 
@@ -162,43 +142,54 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             {
                 // id
                 var idName = section.Substring(1);
-                return new CssSection
+                // CssSelectorType.IdSelector
+                return new ContentSection
                 {
-                    Type = CssSelectorType.IdSelector,
-                    Value = idName
+                    Content = orginnalSection,
+                    CleanedContent = idName,
+                    Index = index,
+                    Type = CssSelectorType.IdSelector
                 };
             }
 
             // attribute selector ([])
             if (section.StartsWith("["))
             {
-                return new CssSection
+                // CssSelectorType.AttributeSelector
+                return new ContentSection
                 {
-                    Type = CssSelectorType.AttributeSelector,
-                    Value = section
+                    Content = orginnalSection,
+                    CleanedContent = section,
+                    Index = index,
+                    Type = CssSelectorType.AttributeSelector
                 };
             }
 
             // ignore at-rules
             if (section.StartsWith("@"))
             {
-                return new CssSection
+                // CssSelectorType.Unknown
+                return new ContentSection
                 {
-                    Type = CssSelectorType.Unknown,
-                    Value = section
+                    Content = orginnalSection,
+                    CleanedContent = section,
+                    Index = index,
+                    Type = CssSelectorType.Unknown
                 };
             }
-
 
 
             if (section.Equals("from", System.StringComparison.OrdinalIgnoreCase)
                 || section.Equals("to", System.StringComparison.OrdinalIgnoreCase))
             {
                 // This is probably keyframes, ignore them
-                return new CssSection
+                // CssSelectorType.Unknown
+                return new ContentSection
                 {
-                    Type = CssSelectorType.Unknown,
-                    Value = section
+                    Content = orginnalSection,
+                    CleanedContent = section,
+                    Index = index,
+                    Type = CssSelectorType.Unknown
                 };
             }
 
@@ -206,17 +197,23 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             // NOTE: We will treat all selectors starting with chars as type selectors
             if (Regex.IsMatch(section, REGEX_FIND_TYPE_SELECTOR))
             {
-                return new CssSection
+                // CssSelectorType.TypeSelector,
+                return new ContentSection
                 {
-                    Type = CssSelectorType.TypeSelector,
-                    Value = section
+                    Content = orginnalSection,
+                    CleanedContent = section,
+                    Index = index,
+                    Type = CssSelectorType.TypeSelector
                 };
             }
 
-            return new CssSection
+            // CssSelectorType.Unknown
+            return new ContentSection
             {
-                Type = CssSelectorType.Unknown,
-                Value = section
+                Content = orginnalSection,
+                CleanedContent = section,
+                Index = index,
+                Type = CssSelectorType.Unknown
             };
         }
 
@@ -224,176 +221,387 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
         {
             var availableClasses = GetAvailableClassesFromHtml(htmlContent);
             var availableIds = GetAvailableIdsFromHtml(htmlContent);
+            var availableTags = GetAvailableTagsFromHtml(htmlContent);
 
+            List<ContentPart> parts = new List<ContentPart>();
             string resultContent = cssContent;
 
-            resultContent = RemoveComments(resultContent);
+            resultContent = RemoveComments(resultContent, ref parts);
+            string workingContent = resultContent;
+            workingContent = RemoveQuote(workingContent);
 
-            var rulesets = GetRulesets(cssContent);
+            GetRulesets(workingContent, ref parts);
 
-            foreach (CssRuleset ruleset in rulesets)
+            var contentsToIgnore = GetIgnoreableRulesets(availableClasses, availableIds, availableTags, ref parts);
+
+            if (contentsToIgnore.Count > 0)
             {
-                var ignoreRuleSet = false;
-                var removeRuleSet = false;
-                var selectors = GetSelectors(ruleset.SelectorList).ToList();
-                var hasAnySelector = false;
-
-                var selectorIndexsToRemove = new List<int>();
-
-                var selectorIndex = 0;
-                foreach (string selector in selectors)
+                contentsToIgnore.Reverse();
+                foreach (var content in contentsToIgnore)
                 {
-                    var hasSelector = true;
-                    var sections = GetSections(selector);
-                    foreach (CssSection section in sections)
+                    if (content is ContentRuleset)
                     {
-                        var hasSection = false;
-                        switch (section.Type)
-                        {
-                            case CssSelectorType.Unknown:
-                                hasSection = true;
-                                break;
-                            case CssSelectorType.UniversalSelector:
-                                hasSection = true;
-                                break;
-                            case CssSelectorType.TypeSelector:
-                                if (HasElement(section.Value, htmlContent))
-                                {
-                                    hasSection = true;
-                                }
-                                break;
-                            case CssSelectorType.ClassSelector:
-                                if (HasCssClass(section.Value, availableClasses))
-                                {
-                                    hasSection = true;
-                                }
-                                break;
-                            case CssSelectorType.IdSelector:
-                                if (HasId(section.Value, availableIds))
-                                {
-                                    hasSection = true;
-                                }
-                                break;
-                            case CssSelectorType.AttributeSelector:
-                                hasSection = true;
-                                break;
-                            default:
-                                ignoreRuleSet = true;
-                                break;
-                        }
-
-                        if (ignoreRuleSet)
-                        {
-                            break;
-                        }
-
-                        // No match found, remove ruleset
-                        if (!hasSection)
-                        {
-                            hasSelector = false;
-                            break;
-                        }
+                        var ruleset = content as ContentRuleset;
+                        var contentLength = ruleset.EndIndex - ruleset.StartIndex;
+                        resultContent = resultContent.Remove(ruleset.StartIndex, contentLength).Insert(ruleset.StartIndex, "{}".PadRight(contentLength - 2));
+                        //resultContent = resultContent.Remove(ruleset.StartIndex, ruleset.EndIndex - ruleset.StartIndex).Insert(ruleset.StartIndex, "{}");
+                        //resultContent = resultContent.Replace(ruleset.Content, "{}");
                     }
-
-                    if (hasSelector)
-                    {
-                        hasAnySelector = true;
-                    }
-                    else
-                    {
-                        selectorIndexsToRemove.Add(selectorIndex);
-                    }
-
-                    if (ignoreRuleSet || removeRuleSet)
-                    {
-                        break;
-                    }
-
-                    selectorIndex++;
-                }
-
-                if (!hasAnySelector && !ignoreRuleSet)
-                {
-                    removeRuleSet = true;
-                }
-
-                if (removeRuleSet)
-                {
-                    resultContent = resultContent.Replace(ruleset.Value, "");
-                }
-                else
-                {
-                    // remove one or more selectors only
-                    if (selectorIndexsToRemove.Count > 0)
-                    {
-                        selectorIndexsToRemove.Reverse();
-                        foreach (int index in selectorIndexsToRemove)
-                        {
-                            selectors.RemoveAt(index);
-                        }
-                        var onlyRequiredSelectors = string.Join(",", selectors);
-
-                        var selectorListIndex = ruleset.Value.IndexOf(ruleset.SelectorList);
-
-                        var newRuleSet = ruleset.Value.Remove(selectorListIndex, ruleset.SelectorList.Length);
-                        newRuleSet = newRuleSet.Insert(selectorListIndex, onlyRequiredSelectors);
-
-
-                        resultContent = resultContent.Replace(ruleset.Value, newRuleSet);
-
-                    }
-                }
-            }
-
-
-            // clean up empty rulesets
-            var cleanupRulesets = GetRulesets(resultContent);
-            foreach (CssRuleset ruleset in cleanupRulesets)
-            {
-                var cleanedDeclaration = ruleset.Declarations.Trim(new[] { '\r', '\n', '\t', ' ' });
-                if (string.IsNullOrEmpty(cleanedDeclaration))
-                {
-                    resultContent = resultContent.Replace(ruleset.Value, "");
                 }
             }
 
             resultContent = resultContent.Replace("\r", "").Replace("\n", "").Replace("  ", "").Replace(": ", ":").Replace(" {", "{").Replace(" (", "(").Replace(", ", ",").Replace(" + ", "+");
 
+            //resultContent = resultContent.Replace("{}{}", "{}");
+
+            resultContent = RemoveEmptyRulesets(resultContent);
+
+            var test = workingContent;
             return resultContent;
         }
 
-        private static string RemoveComments(string resultContent)
+        private static string RemoveQuote(string resultContent)
         {
-            RegexOptions options = RegexOptions.Multiline;
-            var commentMatches = Regex.Matches(resultContent, REGEX_FIND_COMMENTS, options);
-            foreach (Match commentMatch in commentMatches)
+            // temporary remove everything inside "" and '' (as it can contain "," and that will break our selector regexp)
+            string pattern = @"(?<quote>""[^""]*"")";
+            var matches = Regex.Matches(resultContent, pattern);
+            foreach (Match match in matches)
             {
-                var commentGroup = commentMatch.Groups["comment"];
-                if (commentGroup.Success)
+                var group = match.Groups["quote"];
+                if (group.Success)
                 {
-                    resultContent = resultContent.Replace(commentGroup.Value, "");
+                    var previousValue = group.Value;
+                    var valueLength = previousValue.Length - 2;
+                    resultContent = resultContent.Replace(previousValue, @"""" + "".PadRight(valueLength, 'X') + @"""");
+                }
+            }
+
+            pattern = @"'[^']*'";
+            matches = Regex.Matches(resultContent, pattern);
+            foreach (Match match in matches)
+            {
+                var group = match.Groups["quote"];
+                if (group.Success)
+                {
+                    var previousValue = group.Value;
+                    var valueLength = previousValue.Length - 2;
+                    resultContent = resultContent.Replace(previousValue, @"'" + "".PadRight(valueLength, 'X') + @"'");
                 }
             }
 
             return resultContent;
         }
 
+        private static string RemoveEmptyRulesets(string resultContent)
+        {
+            RegexOptions options = RegexOptions.Multiline;
+            string patternFindEmptyRulesets = @"(?<emptyRulesets>[^{}]*{})";
+            Regex regex = new Regex(patternFindEmptyRulesets, options);
+            resultContent = regex.Replace(resultContent, @" ");
+            //var isDirty = true;
+            //while (isDirty)
+            //{
+            //    isDirty = false;
+            //    string patternFindEmptyRulesets = @"(?<emptyRulesets>[^{}]*{})";
+            //    var matches = Regex.Matches(resultContent, patternFindEmptyRulesets);
+            //    foreach (Match match in matches)
+            //    {
+            //        var group = match.Groups["emptyRulesets"];
+            //        if (group.Success)
+            //        {
+            //            resultContent = resultContent.Replace(group.Value, "");
+            //            isDirty = true;
+            //        }
+            //    }
+            //}
+
+            return resultContent;
+        }
+
+        private List<ContentPart> GetIgnoreableRulesets(List<string> availableClasses, List<string> availableIds, List<string> availableTags, ref List<ContentPart> parts)
+        {
+            List<ContentPart> ignoreableRulesets = new List<ContentPart>();
+
+            foreach (ContentPart part in parts)
+            {
+                var ruleset = part as ContentRuleset;
+                if (ruleset == null)
+                    continue;
+                GetIgnoreableRules(availableClasses, availableIds, availableTags, ignoreableRulesets, part);
+                if (ruleset.Parts != null && ruleset.Parts.Count > 0)
+                {
+                    foreach (var subPart in ruleset.Parts)
+                    {
+                        GetIgnoreableRules(availableClasses, availableIds, availableTags, ignoreableRulesets, subPart);
+                    }
+                }
+            }
+
+            return ignoreableRulesets;
+        }
+
+        private void GetIgnoreableRules(List<string> availableClasses, List<string> availableIds, List<string> availableTags, List<ContentPart> ignoreableRulesets, ContentPart part)
+        {
+            var ruleset = part as ContentRuleset;
+            if (ruleset == null)
+            {
+                // Ignore everything that is not a ruleset, for example comments
+                return;
+            }
+
+            // TODO: If ruleset.Parts is not null/empty, make sure we loop all of them as well
+            // TOOD: make logic inside of this foreach a seperate function (so it can be called recursive)
+
+            //if (ruleset.Parts != null && ruleset.Parts.Count > 0)
+            //{
+            //    foreach (var subPart in ruleset.Parts)
+            //    {
+            //        GetIgnoreableRules(availableClasses, availableIds, availableTags, ignoreableRulesets, subPart);
+            //    }
+            //}
+
+            var selectorList = ruleset.SelectorList;
+
+            ContentSelectorList contentSelectorList = new ContentSelectorList
+            {
+                Type = PartType.SelectorList,
+                Content = ruleset.SelectorList,
+                CleanedContent = selectorList,
+            };
+
+            var selectorListIsDirty = false;
+            var selectors = GetSelectors(selectorList);
+            contentSelectorList.Selectors = selectors;
+            foreach (var selector in selectors)
+            {
+                var removeSelector = false;
+                GetSections(selector);
+                foreach (ContentSection section in selector.Sections)
+                {
+                    switch (section.Type)
+                    {
+                        case CssSelectorType.Unknown:
+                            // We don't know what this is, make sure it is left untouched (by not doing anything)
+                            section.Used = true;
+                            break;
+                        case CssSelectorType.UniversalSelector:
+                            // We don't how to handle this, make sure it is left untouched (by not doing anything)
+                            section.Used = true;
+                            break;
+                        case CssSelectorType.TypeSelector:
+                            if (!HasElement(section.CleanedContent, availableTags))
+                            {
+                                // we don't have this element, add this selector to ignore list
+                                removeSelector = true;
+                            }
+                            else
+                            {
+                                section.Used = true;
+                            }
+                            break;
+                        case CssSelectorType.ClassSelector:
+                            if (!HasCssClass(section.CleanedContent, availableClasses))
+                            {
+                                // we don't have this class, add this selector to ignore list
+                                removeSelector = true;
+                            }
+                            else
+                            {
+                                section.Used = true;
+                            }
+                            break;
+                        case CssSelectorType.IdSelector:
+                            if (!HasId(section.CleanedContent, availableIds))
+                            {
+                                // we don't have this id, add this selector to ignore list
+                                removeSelector = true;
+                            }
+                            else
+                            {
+                                section.Used = true;
+                            }
+                            break;
+                        case CssSelectorType.AttributeSelector:
+                            // We don't how to handle this, make sure it is left untouched (by not doing anything)
+                            section.Used = true;
+                            break;
+                        default:
+                            // We don't know what this is, make sure it is left untouched (by not doing anything)
+                            section.Used = true;
+                            break;
+                    }
+                }
+
+                selector.Used = !removeSelector;
+            }
+
+            contentSelectorList.Used = selectors.Any(s => s.Used);
+            if (!contentSelectorList.Used)
+            {
+                // remove selectorlist all together
+                ignoreableRulesets.Add(ruleset);
+            }
+            else if (selectors.Any(s => !s.Used))
+            {
+                // remove specific selector
+            }
+        }
+
+        private void GetRulesets(string resultContent, ref List<ContentPart> parts)
+        {
+            int startIndex = 0;
+            int prevStartIndex = 0;
+            var parentStartIndex = -1;
+            var isDirty = true;
+            List<ContentRuleset> childParts = new List<ContentRuleset>();
+
+            while (isDirty)
+            {
+                isDirty = false;
+                startIndex = resultContent.IndexOf("{", startIndex);
+                if (startIndex != -1)
+                {
+                    var endIndex = resultContent.IndexOf("}", startIndex + 1) + 1;
+                    var nextStartIndex = resultContent.IndexOf("{", startIndex + 1);
+
+                    if (nextStartIndex != -1 && nextStartIndex < endIndex)
+                    {
+                        // We have identified nested block, fix this
+                        parentStartIndex = prevStartIndex;
+                        prevStartIndex = startIndex + 1;
+                        startIndex = nextStartIndex;
+                        isDirty = true;
+                        continue;
+                    }
+
+                    var content = resultContent.Substring(startIndex, endIndex - startIndex);
+                    var selectorList = resultContent.Substring(prevStartIndex, startIndex - prevStartIndex);
+
+                    if (parentStartIndex == -1)
+                    {
+                        var part = new ContentRuleset
+                        {
+                            StartIndex = startIndex,
+                            EndIndex = endIndex,
+                            SelectorList = selectorList,
+                            Content = content,
+                            Type = PartType.Block
+                        };
+
+                        if (parentStartIndex == -1 && childParts.Count > 0)
+                        {
+                            part.Parts = childParts;
+                            childParts = new List<ContentRuleset>();
+                        }
+
+                        parts.Add(part);
+                    }
+                    else
+                    {
+                        childParts.Add(new ContentRuleset
+                        {
+                            StartIndex = startIndex,
+                            EndIndex = endIndex,
+                            SelectorList = selectorList,
+                            Content = content,
+                            Type = PartType.Block
+                        });
+                    }
+
+                    var rulesetContent = selectorList + content;
+                    var length = rulesetContent.Length;
+                    //resultContent = resultContent.Replace(content, "".PadRight(length));
+                    resultContent = resultContent.Replace(rulesetContent, "".PadRight(length));
+
+                    //resultContent = resultContent.Replace(selectorList +  , startIndex - prevStartIndex).Trim();
+
+
+                    var nextEndIndex = resultContent.IndexOf("}", endIndex);
+                    if (nextEndIndex < nextStartIndex)
+                    {
+                        // We have reached end of parent block, restart from begining
+                        isDirty = true;
+                        prevStartIndex = parentStartIndex;
+                        startIndex = parentStartIndex;
+                        parentStartIndex = -1;
+                        continue;
+                    }
+
+
+                    isDirty = true;
+                    prevStartIndex = startIndex;
+                    startIndex = endIndex;
+                }
+
+            }
+        }
+
+        private static string RemoveComments(string resultContent, ref List<ContentPart> parts)
+        {
+            var isDirty = true;
+            while (isDirty)
+            {
+                isDirty = false;
+                var startIndex = resultContent.IndexOf("/*");
+                if (startIndex != -1)
+                {
+                    var endIndex = resultContent.IndexOf("*/", startIndex + 2) + 2;
+
+                    var content = resultContent.Substring(startIndex, endIndex - startIndex);
+                    parts.Add(new ContentPart
+                    {
+                        StartIndex = startIndex,
+                        EndIndex = endIndex,
+                        Content = content,
+                        Type = PartType.Comment
+                    });
+
+                    var length = endIndex - startIndex;
+                    resultContent = resultContent.Replace(content, "".PadRight(length));
+                    isDirty = true;
+                }
+
+            }
+
+            //RegexOptions options = RegexOptions.Multiline;
+            //var commentMatches = Regex.Matches(resultContent, REGEX_FIND_COMMENTS, options);
+            //foreach (Match commentMatch in commentMatches)
+            //{
+            //    var commentGroup = commentMatch.Groups["comment"];
+            //    if (commentGroup.Success)
+            //    {
+            //        resultContent = resultContent.Replace(commentGroup.Value, "");
+            //    }
+            //}
+
+            return resultContent;
+        }
+
+        private static List<string> GetAvailableTagsFromHtml(string htmlContent)
+        {
+            var matchTagNames = Regex.Matches(htmlContent, REGEX_FIND_TAGNAME);
+            var availableTagNames = matchTagNames.Cast<Match>().Select(match => match.Groups["tagName"]).Where(group => group.Success && group.Value != null).Select(group => group.Value.ToLowerInvariant()).Distinct().ToList();
+            return availableTagNames;
+        }
+
+
         private static List<string> GetAvailableIdsFromHtml(string htmlContent)
         {
             var matchIds = Regex.Matches(htmlContent, REGEX_FIND_ID);
-            var availableIds = matchIds.Cast<Match>().Select(match => match.Groups["id"]).Where(group => group.Success).Select(group => group.Value).ToList();
+            var availableIds = matchIds.Cast<Match>().Select(match => match.Groups["id"]).Where(group => group.Success).Select(group => group.Value).Distinct().ToList();
             return availableIds;
         }
 
         private static List<string> GetAvailableClassesFromHtml(string htmlContent)
         {
             var matchClasses = Regex.Matches(htmlContent, REGEX_FIND_CLASS);
-            return matchClasses.Cast<Match>().Select(match => match.Groups["classNames"]).Where(group => group.Success).Select(group => group.Value.Replace("&#32;", " ")).ToList();
+            return matchClasses.Cast<Match>().Select(match => match.Groups["classNames"]).Where(group => group.Success).Select(group => group.Value.Replace("&#32;", " ")).Distinct().ToList();
         }
 
-        private bool HasElement(string elementName, string htmlContent)
+        private bool HasElement(string tagName, List<string> availableTags)
         {
-            return (htmlContent.IndexOf("<" + elementName) != -1);
+            tagName = tagName.ToLowerInvariant();
+            return availableTags.Any(name => name == tagName);
         }
 
         private bool HasId(string idName, List<string> availableIds)

@@ -41,10 +41,17 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Models\ContentIgnoreSelector.cs" />
+    <Compile Include="Models\ContentSection.cs" />
+    <Compile Include="Models\ContentSelector.cs" />
+    <Compile Include="Models\ContentSelectorList.cs" />
     <Compile Include="Models\CssSection.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Interfaces\IRequiredCssOnlyService.cs" />
     <Compile Include="Models\CssRuleset.cs" />
+    <Compile Include="Models\ContentPart.cs" />
+    <Compile Include="Models\ContentRuleset.cs" />
+    <Compile Include="Models\PartType.cs" />
     <Compile Include="Services\RequiredCssOnlyService.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
