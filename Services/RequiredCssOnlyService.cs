@@ -294,26 +294,13 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 
         private static string RemoveEmptyRulesets(string resultContent)
         {
-            RegexOptions options = RegexOptions.Multiline;
-            string patternFindEmptyRulesets = @"(?<emptyRulesets>[^{}]*{})";
-            Regex regex = new Regex(patternFindEmptyRulesets, options);
-            resultContent = regex.Replace(resultContent, @" ");
-            //var isDirty = true;
-            //while (isDirty)
-            //{
-            //    isDirty = false;
-            //    string patternFindEmptyRulesets = @"(?<emptyRulesets>[^{}]*{})";
-            //    var matches = Regex.Matches(resultContent, patternFindEmptyRulesets);
-            //    foreach (Match match in matches)
-            //    {
-            //        var group = match.Groups["emptyRulesets"];
-            //        if (group.Success)
-            //        {
-            //            resultContent = resultContent.Replace(group.Value, "");
-            //            isDirty = true;
-            //        }
-            //    }
-            //}
+            for (int i = 0; i < 2; i++)
+            {
+                RegexOptions options = RegexOptions.Multiline;
+                string patternFindEmptyRulesets = @"(?<emptyRulesets>[^{}]*{[\r\n\t ]*})";
+                Regex regex = new Regex(patternFindEmptyRulesets, options);
+                resultContent = regex.Replace(resultContent, @"");
+            }
 
             return resultContent;
         }
