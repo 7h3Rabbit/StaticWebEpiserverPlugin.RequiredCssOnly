@@ -222,37 +222,41 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             var availableTags = GetAvailableTagsFromHtml(htmlContent);
 
             List<ContentPart> parts = new List<ContentPart>();
-            string resultContent = cssContent;
+            string resultingCssContent = cssContent;
 
-            resultContent = RemoveComments(resultContent, ref parts);
-            string workingContent = resultContent;
-            workingContent = RemoveQuote(workingContent);
+            resultingCssContent = RemoveComments(resultingCssContent, ref parts);
+            string workingContent = RemoveQuote(resultingCssContent);
 
             GetRulesets(workingContent, ref parts);
 
-            var contentsToIgnore = GetIgnoreableRulesets(availableClasses, availableIds, availableTags, ref parts);
+            var contentToIgnore = GetIgnoreableRulesets(availableClasses, availableIds, availableTags, ref parts);
 
-            if (contentsToIgnore.Count > 0)
+            if (contentToIgnore.Count > 0)
             {
-                contentsToIgnore.Reverse();
-                foreach (var content in contentsToIgnore)
+                contentToIgnore.Reverse();
+                foreach (var content in contentToIgnore)
                 {
                     if (content is ContentRuleset)
                     {
                         var ruleset = content as ContentRuleset;
                         var contentLength = ruleset.EndIndex - ruleset.StartIndex;
-                        resultContent = resultContent.Remove(ruleset.StartIndex, contentLength).Insert(ruleset.StartIndex, "{}".PadRight(contentLength - 2));
+                        resultingCssContent = resultingCssContent.Remove(ruleset.StartIndex, contentLength).Insert(ruleset.StartIndex, "{}".PadRight(contentLength - 2));
                     }
                 }
             }
 
-            resultContent = resultContent.Replace("\r", "").Replace("\n", "").Replace("  ", "").Replace(": ", ":").Replace(" {", "{").Replace(" (", "(").Replace(", ", ",").Replace(" + ", "+");
+            resultingCssContent = RemoveUselessSpaces(resultingCssContent);
 
-            resultContent = RemoveEmptyRulesets(resultContent);
+            resultingCssContent = RemoveEmptyRulesets(resultingCssContent);
 
-            resultContent = resultContent.Trim(' ');
+            resultingCssContent = resultingCssContent.Trim(' ');
 
-            return resultContent;
+            return resultingCssContent;
+        }
+
+        private static string RemoveUselessSpaces(string resultingCssContent)
+        {
+            return resultingCssContent.Replace("\r", "").Replace("\n", "").Replace("  ", "").Replace(": ", ":").Replace(" {", "{").Replace(" (", "(").Replace(", ", ",").Replace(" + ", "+");
         }
 
         private static string RemoveQuote(string resultContent)
