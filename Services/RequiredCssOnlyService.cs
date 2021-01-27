@@ -250,7 +250,8 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 
             resultContent = RemoveEmptyRulesets(resultContent);
 
-            var test = workingContent;
+            resultContent = resultContent.Trim(' ');
+
             return resultContent;
         }
 
