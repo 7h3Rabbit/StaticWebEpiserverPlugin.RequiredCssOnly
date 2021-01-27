@@ -83,7 +83,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 
         private static ContentSection GetSection(string section, int index)
         {
-            var orginnalSection = section;
+            var orginalSection = section;
             section = section.Trim(new[] { ' ', '\t', '\r', '\n' });
 
             var pseudoElement = "";
@@ -114,7 +114,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 // CssSelectorType.UniversalSelector
                 return new ContentSection
                 {
-                    Content = orginnalSection,
+                    Content = orginalSection,
                     CleanedContent = section,
                     Index = index,
                     Type = CssSelectorType.UniversalSelector
@@ -128,7 +128,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 // CssSelectorType.ClassSelector,
                 return new ContentSection
                 {
-                    Content = orginnalSection,
+                    Content = orginalSection,
                     CleanedContent = section.Substring(1),
                     Index = index,
                     Type = CssSelectorType.ClassSelector
@@ -143,7 +143,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 // CssSelectorType.IdSelector
                 return new ContentSection
                 {
-                    Content = orginnalSection,
+                    Content = orginalSection,
                     CleanedContent = idName,
                     Index = index,
                     Type = CssSelectorType.IdSelector
@@ -156,7 +156,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 // CssSelectorType.AttributeSelector
                 return new ContentSection
                 {
-                    Content = orginnalSection,
+                    Content = orginalSection,
                     CleanedContent = section,
                     Index = index,
                     Type = CssSelectorType.AttributeSelector
@@ -169,7 +169,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 // CssSelectorType.Unknown
                 return new ContentSection
                 {
-                    Content = orginnalSection,
+                    Content = orginalSection,
                     CleanedContent = section,
                     Index = index,
                     Type = CssSelectorType.Unknown
@@ -184,7 +184,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 // CssSelectorType.Unknown
                 return new ContentSection
                 {
-                    Content = orginnalSection,
+                    Content = orginalSection,
                     CleanedContent = section,
                     Index = index,
                     Type = CssSelectorType.Unknown
@@ -198,7 +198,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 // CssSelectorType.TypeSelector,
                 return new ContentSection
                 {
-                    Content = orginnalSection,
+                    Content = orginalSection,
                     CleanedContent = section,
                     Index = index,
                     Type = CssSelectorType.TypeSelector
@@ -208,7 +208,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             // CssSelectorType.Unknown
             return new ContentSection
             {
-                Content = orginnalSection,
+                Content = orginalSection,
                 CleanedContent = section,
                 Index = index,
                 Type = CssSelectorType.Unknown
