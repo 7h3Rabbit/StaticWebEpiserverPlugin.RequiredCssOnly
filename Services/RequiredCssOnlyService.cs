@@ -10,21 +10,23 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
     public partial class RequiredCssOnlyService : IRequiredCssOnlyService
     {
         const string REGEX_FIND_COMMENTS = @"(?<comment>\/\*[^*]*\*+([^\/*][^*]*\*+)*\/)";
-        const string REGEX_FIND_ALL_STATEMENTS = @"(?<ruleset>(?<selectorList>[^;{}]+)(?<declarationBlock>{(?<declarations>[^}{]+)}))";
-        const string REGEX_FIND_SELECTORS = @"(?<selector>[^,]+)";
-        const string REGEX_FIND_SELECTOR_SECTION = @"(?<section>[^>~+|| ]+)";
-        const string REGEX_FIND_SELECTOR_SUB_SECTION = @"(?<section>[.#\[]{0,1}[^.#\[]+)";
-        const string REGEX_FIND_TYPE_SELECTOR = @"^([a-zA-Z])";
-        const string REGEX_FIND_TAGNAME = @"<(?<tagName>[^>| |\/]+)";
-        const string REGEX_FIND_ID = @"id=[""|'](?<id>[^""|']+)[""|']";
-        const string REGEX_FIND_CLASS = @"class=[""|'](?<classNames>[^""|']+)[""|']";
+        static readonly Regex REGEX_FIND_EMPTY_RULESETS = new Regex(@"(?<emptyRulesets>[^{}]*{[\r\n\t ]*})", RegexOptions.Compiled | RegexOptions.Multiline);
+        static readonly Regex REGEX_FIND_SINGLE_QUOTE = new Regex(@"'[^']*'", RegexOptions.Compiled);
+        static readonly Regex REGEX_FIND_QUOTE = new Regex(@"(?<quote>""[^""]*"")", RegexOptions.Compiled);
+        static readonly Regex REGEX_FIND_ALL_STATEMENTS = new Regex(@"(?<ruleset>(?<selectorList>[^;{}]+)(?<declarationBlock>{(?<declarations>[^}{]+)}))", RegexOptions.Compiled | RegexOptions.Multiline);
+        static readonly Regex REGEX_FIND_SELECTORS = new Regex(@"(?<selector>[^,]+)", RegexOptions.Compiled);
+        static readonly Regex REGEX_FIND_SELECTOR_SECTION = new Regex(@"(?<section>[^>~+|| ]+)", RegexOptions.Compiled | RegexOptions.Multiline);
+        static readonly Regex REGEX_FIND_SELECTOR_SUB_SECTION = new Regex(@"(?<section>[.#\[]{0,1}[^.#\[]+)", RegexOptions.Compiled | RegexOptions.Multiline);
+        static readonly Regex REGEX_FIND_TYPE_SELECTOR = new Regex(@"^([a-zA-Z])", RegexOptions.Compiled);
+        static readonly Regex REGEX_FIND_TAGNAME = new Regex(@"<(?<tagName>[^>| |\/]+)", RegexOptions.Compiled);
+        static readonly Regex REGEX_FIND_ID = new Regex(@"id=[""|'](?<id>[^""|']+)[""|']", RegexOptions.Compiled);
+        static readonly Regex REGEX_FIND_CLASS = new Regex(@"class=[""|'](?<classNames>[^""|']+)[""|']", RegexOptions.Compiled);
 
         protected List<ContentSelector> GetSelectors(string cssSelectoList)
         {
             List<ContentSelector> selectors = new List<ContentSelector>();
-            RegexOptions options = RegexOptions.Multiline;
 
-            var selectorMatches = Regex.Matches(cssSelectoList, REGEX_FIND_SELECTORS, options);
+            var selectorMatches = REGEX_FIND_SELECTORS.Matches(cssSelectoList);
             foreach (Match selectorMatch in selectorMatches)
             {
                 var selectorGroup = selectorMatch.Groups["selector"];
@@ -51,10 +53,8 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 
         protected void GetSections(ContentSelector selector)
         {
-            RegexOptions options = RegexOptions.Multiline;
-
             var index = 0;
-            var sectionMatches = Regex.Matches(selector.CleanedContent, REGEX_FIND_SELECTOR_SECTION, options);
+            var sectionMatches = REGEX_FIND_SELECTOR_SECTION.Matches(selector.CleanedContent);
             foreach (Match sectionMatch in sectionMatches)
             {
                 var sectionGroup = sectionMatch.Groups["section"];
@@ -63,7 +63,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                     continue;
                 }
 
-                var subSectionMatches = Regex.Matches(sectionGroup.Value, REGEX_FIND_SELECTOR_SUB_SECTION, options);
+                var subSectionMatches = REGEX_FIND_SELECTOR_SUB_SECTION.Matches(sectionGroup.Value);
                 foreach (Match subSectionMatch in subSectionMatches)
                 {
                     var subSectionGroup = subSectionMatch.Groups["section"];
@@ -193,7 +193,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 
             // type selector (element selector)
             // NOTE: We will treat all selectors starting with chars as type selectors
-            if (Regex.IsMatch(section, REGEX_FIND_TYPE_SELECTOR))
+            if (REGEX_FIND_TYPE_SELECTOR.IsMatch(section))
             {
                 // CssSelectorType.TypeSelector,
                 return new ContentSection
@@ -233,6 +233,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 
             if (contentToIgnore.Count > 0)
             {
+                System.Text.StringBuilder sbContent = new System.Text.StringBuilder(resultingCssContent);
                 contentToIgnore.Reverse();
                 foreach (var content in contentToIgnore)
                 {
@@ -240,9 +241,10 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                     {
                         var ruleset = content as ContentRuleset;
                         var contentLength = ruleset.EndIndex - ruleset.StartIndex;
-                        resultingCssContent = resultingCssContent.Remove(ruleset.StartIndex, contentLength).Insert(ruleset.StartIndex, "{}".PadRight(contentLength - 2));
+                        sbContent.Remove(ruleset.StartIndex, contentLength).Insert(ruleset.StartIndex, "{}".PadRight(contentLength - 2));
                     }
                 }
+                resultingCssContent = sbContent.ToString();
             }
 
             resultingCssContent = RemoveUselessSpaces(resultingCssContent);
@@ -259,11 +261,11 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             return resultingCssContent.Replace("\r", "").Replace("\n", "").Replace("  ", "").Replace(": ", ":").Replace(" {", "{").Replace(" (", "(").Replace(", ", ",").Replace(" + ", "+");
         }
 
-        private static string RemoveQuote(string resultContent)
+        private static string RemoveQuote(string content)
         {
+            System.Text.StringBuilder resultContent = new System.Text.StringBuilder(content);
             // temporary remove everything inside "" and '' (as it can contain "," and that will break our selector regexp)
-            string pattern = @"(?<quote>""[^""]*"")";
-            var matches = Regex.Matches(resultContent, pattern);
+            var matches = REGEX_FIND_QUOTE.Matches(content);
             foreach (Match match in matches)
             {
                 var group = match.Groups["quote"];
@@ -271,12 +273,12 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 {
                     var previousValue = group.Value;
                     var valueLength = previousValue.Length - 2;
-                    resultContent = resultContent.Replace(previousValue, @"""" + "".PadRight(valueLength, 'X') + @"""");
+                    resultContent.Remove(group.Index, group.Length);
+                    resultContent.Insert(group.Index, @"""" + "".PadRight(valueLength, 'X') + @"""");
                 }
             }
 
-            pattern = @"'[^']*'";
-            matches = Regex.Matches(resultContent, pattern);
+            matches = REGEX_FIND_SINGLE_QUOTE.Matches(content);
             foreach (Match match in matches)
             {
                 var group = match.Groups["quote"];
@@ -284,21 +286,19 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 {
                     var previousValue = group.Value;
                     var valueLength = previousValue.Length - 2;
-                    resultContent = resultContent.Replace(previousValue, @"'" + "".PadRight(valueLength, 'X') + @"'");
+                    resultContent.Remove(group.Index, group.Length);
+                    resultContent.Insert(group.Index, @"'" + "".PadRight(valueLength, 'X') + @"'");
                 }
             }
 
-            return resultContent;
+            return resultContent.ToString();
         }
 
         private static string RemoveEmptyRulesets(string resultContent)
         {
             for (int i = 0; i < 2; i++)
             {
-                RegexOptions options = RegexOptions.Multiline;
-                string patternFindEmptyRulesets = @"(?<emptyRulesets>[^{}]*{[\r\n\t ]*})";
-                Regex regex = new Regex(patternFindEmptyRulesets, options);
-                resultContent = regex.Replace(resultContent, @"");
+                resultContent = REGEX_FIND_EMPTY_RULESETS.Replace(resultContent, @"");
             }
 
             return resultContent;
@@ -424,9 +424,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 
         protected void GetRulesets(string cssContent, ref List<ContentPart> parts)
         {
-            RegexOptions options = RegexOptions.Multiline;
-
-            var rulesetMatches = Regex.Matches(cssContent, REGEX_FIND_ALL_STATEMENTS, options);
+            var rulesetMatches = REGEX_FIND_ALL_STATEMENTS.Matches(cssContent);
             foreach (Match rulesetMatch in rulesetMatches)
             {
                 var rulesetGroup = rulesetMatch.Groups["ruleset"];
@@ -463,39 +461,42 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             }
         }
 
-        private static string RemoveComments(string resultContent, ref List<ContentPart> parts)
+        private static string RemoveComments(string content, ref List<ContentPart> parts)
         {
+            var resultContent = new System.Text.StringBuilder(content);
             var isDirty = true;
+            var startIndex = 0;
             while (isDirty)
             {
                 isDirty = false;
-                var startIndex = resultContent.IndexOf("/*");
+                startIndex = content.IndexOf("/*", startIndex);
                 if (startIndex != -1)
                 {
-                    var endIndex = resultContent.IndexOf("*/", startIndex + 2) + 2;
+                    var endIndex = content.IndexOf("*/", startIndex + 2) + 2;
 
-                    var content = resultContent.Substring(startIndex, endIndex - startIndex);
+                    var commentContent = content.Substring(startIndex, endIndex - startIndex);
                     parts.Add(new ContentPart
                     {
                         StartIndex = startIndex,
                         EndIndex = endIndex,
-                        Content = content,
+                        Content = commentContent,
                         Type = PartType.Comment
                     });
 
                     var length = endIndex - startIndex;
-                    resultContent = resultContent.Replace(content, "".PadRight(length));
+                    resultContent = resultContent.Replace(commentContent, "".PadRight(length));
                     isDirty = true;
+                    startIndex = endIndex + 2;
                 }
 
             }
 
-            return resultContent;
+            return resultContent.ToString();
         }
 
         private static List<string> GetAvailableTagsFromHtml(string htmlContent)
         {
-            var matchTagNames = Regex.Matches(htmlContent, REGEX_FIND_TAGNAME);
+            var matchTagNames = REGEX_FIND_TAGNAME.Matches(htmlContent);
             var availableTagNames = matchTagNames.Cast<Match>().Select(match => match.Groups["tagName"]).Where(group => group.Success && group.Value != null).Select(group => group.Value.ToLowerInvariant()).Distinct().ToList();
             return availableTagNames;
         }
@@ -503,14 +504,14 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 
         private static List<string> GetAvailableIdsFromHtml(string htmlContent)
         {
-            var matchIds = Regex.Matches(htmlContent, REGEX_FIND_ID);
+            var matchIds = REGEX_FIND_ID.Matches(htmlContent);
             var availableIds = matchIds.Cast<Match>().Select(match => match.Groups["id"]).Where(group => group.Success).Select(group => group.Value).Distinct().ToList();
             return availableIds;
         }
 
         private static List<string> GetAvailableClassesFromHtml(string htmlContent)
         {
-            var matchClasses = Regex.Matches(htmlContent, REGEX_FIND_CLASS);
+            var matchClasses = REGEX_FIND_CLASS.Matches(htmlContent);
             return matchClasses.Cast<Match>().Select(match => match.Groups["classNames"]).Where(group => group.Success).Select(group => group.Value.Replace("&#32;", " ")).Distinct().ToList();
         }
 
@@ -527,7 +528,11 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 
         private bool HasCssClass(string className, List<string> availableClasses)
         {
-            return availableClasses.Any(classNames => classNames.Equals(className) || classNames.StartsWith(className + " ") || classNames.Contains(" " + className + " ") || classNames.EndsWith(" " + className));
+            string classNameWithEndingSpace = className + " ";
+            string classNameWithStartingSpace = " " + className;
+            string classNameSurroundedWithSpace = " " + className + " ";
+
+            return availableClasses.Any(classNames => classNames.Equals(className) || classNames.StartsWith(classNameWithEndingSpace) || classNames.Contains(classNameSurroundedWithSpace) || classNames.EndsWith(classNameWithStartingSpace));
         }
     }
 }
