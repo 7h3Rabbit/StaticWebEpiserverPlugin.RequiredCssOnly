@@ -300,7 +300,6 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             {
                 resultContent = REGEX_FIND_EMPTY_RULESETS.Replace(resultContent, @"");
             }
-
             return resultContent;
         }
 
@@ -512,7 +511,9 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
         private static List<string> GetAvailableClassesFromHtml(string htmlContent)
         {
             var matchClasses = REGEX_FIND_CLASS.Matches(htmlContent);
-            return matchClasses.Cast<Match>().Select(match => match.Groups["classNames"]).Where(group => group.Success).Select(group => group.Value.Replace("&#32;", " ")).Distinct().ToList();
+            var classes = matchClasses.Cast<Match>().Select(match => match.Groups["classNames"]).Where(group => group.Success).Select(group => group.Value.Replace("&#32;", " "));
+            var classNames = classes.SelectMany(list => list.Split(' ')).Distinct().ToList();
+            return classNames;
         }
 
         private bool HasElement(string tagName, List<string> availableTags)
@@ -532,7 +533,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             string classNameWithStartingSpace = " " + className;
             string classNameSurroundedWithSpace = " " + className + " ";
 
-            return availableClasses.Any(classNames => classNames.Equals(className) || classNames.StartsWith(classNameWithEndingSpace) || classNames.Contains(classNameSurroundedWithSpace) || classNames.EndsWith(classNameWithStartingSpace));
+            return availableClasses.Any(classNames => classNames.Equals(className));
         }
     }
 }
