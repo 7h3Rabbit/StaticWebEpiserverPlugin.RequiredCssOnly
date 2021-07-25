@@ -6,6 +6,6 @@
         public string Content { get; set; }
         public CssSelectorType Type { get; set; }
         public string CleanedContent { get; set; }
-        public bool Used { get; set; } 
+        public bool Used { get; set; }
     }
 }
