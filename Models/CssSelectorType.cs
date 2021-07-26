@@ -14,10 +14,4 @@
         // attribute selector ([])
         AttributeSelector
     }
-
-    public class CssSection
-    {
-        public CssSelectorType Type { get; set; }
-        public string Value { get; set; }
-    }
 }

@@ -42,10 +42,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Models\ContentIgnoreSelector.cs" />
+    <Compile Include="Models\ContentReplacedRuleset.cs" />
     <Compile Include="Models\ContentSection.cs" />
     <Compile Include="Models\ContentSelector.cs" />
     <Compile Include="Models\ContentSelectorList.cs" />
-    <Compile Include="Models\CssSection.cs" />
+    <Compile Include="Models\CssSelectorType.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Interfaces\IRequiredCssOnlyService.cs" />
     <Compile Include="Models\CssRuleset.cs" />

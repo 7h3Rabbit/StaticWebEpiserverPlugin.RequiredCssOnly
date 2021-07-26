@@ -16,7 +16,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
         static readonly Regex REGEX_FIND_ALL_STATEMENTS = new Regex(@"(?<ruleset>(?<selectorList>[^;{}]+)(?<declarationBlock>{(?<declarations>[^}{]+)}))", RegexOptions.Compiled | RegexOptions.Multiline);
         static readonly Regex REGEX_FIND_SELECTORS = new Regex(@"(?<selector>[^,]+)", RegexOptions.Compiled);
         static readonly Regex REGEX_FIND_SELECTOR_SECTION = new Regex(@"(?<section>[^>~+|| ]+)", RegexOptions.Compiled | RegexOptions.Multiline);
-        static readonly Regex REGEX_FIND_SELECTOR_SUB_SECTION = new Regex(@"(?<section>[.#\[]{0,1}[^.#\[]+)", RegexOptions.Compiled | RegexOptions.Multiline);
+        static readonly Regex REGEX_FIND_SELECTOR_SUB_SECTION = new Regex(@"(?<section>[.#\[:]{0,1}[^.#\[:]+)", RegexOptions.Compiled | RegexOptions.Multiline);
         static readonly Regex REGEX_FIND_TYPE_SELECTOR = new Regex(@"^([a-zA-Z])", RegexOptions.Compiled);
         static readonly Regex REGEX_FIND_TAGNAME = new Regex(@"<(?<tagName>[^>| |\/]+)", RegexOptions.Compiled);
         static readonly Regex REGEX_FIND_ID = new Regex(@"id=[""|'](?<id>[^""|']+)[""|']", RegexOptions.Compiled);
@@ -75,7 +75,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                     if (string.IsNullOrEmpty(subSectionGroup.Value))
                         continue;
 
-                    var section = GetSection(subSectionGroup.Value, index);
+                    var section = GetSection(subSectionGroup.Value, index++);
                     selector.Sections.Add(section);
                 }
             }
@@ -229,7 +229,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 
             GetRulesets(workingContent, ref parts);
 
-            var contentToIgnore = GetIgnoreableRulesets(availableClasses, availableIds, availableTags, ref parts);
+            var contentToIgnore = GetIgnoreableOrModifiedContent(availableClasses, availableIds, availableTags, ref parts);
 
             if (contentToIgnore.Count > 0)
             {
@@ -237,7 +237,13 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 contentToIgnore.Reverse();
                 foreach (var content in contentToIgnore)
                 {
-                    if (content is ContentRuleset)
+                    if (content is ContentReplacedRuleset)
+                    {
+                        var ruleset = content as ContentReplacedRuleset;
+                        var contentLength = ruleset.EndIndex - ruleset.StartIndex;
+                        sbContent.Remove(ruleset.StartIndex, contentLength).Insert(ruleset.StartIndex, ruleset.ReplacedContent);
+                    }
+                    else if (content is ContentRuleset)
                     {
                         var ruleset = content as ContentRuleset;
                         var contentLength = ruleset.EndIndex - ruleset.StartIndex;
@@ -303,7 +309,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             return resultContent;
         }
 
-        private List<ContentPart> GetIgnoreableRulesets(List<string> availableClasses, List<string> availableIds, List<string> availableTags, ref List<ContentPart> parts)
+        private List<ContentPart> GetIgnoreableOrModifiedContent(List<string> availableClasses, List<string> availableIds, List<string> availableTags, ref List<ContentPart> parts)
         {
             List<ContentPart> ignoreableRulesets = new List<ContentPart>();
 
@@ -312,12 +318,12 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
                 var ruleset = part as ContentRuleset;
                 if (ruleset == null)
                     continue;
-                GetIgnoreableRules(availableClasses, availableIds, availableTags, ignoreableRulesets, part);
+                GetIgnoreableOrModifiedRules(availableClasses, availableIds, availableTags, ignoreableRulesets, part);
                 if (ruleset.Parts != null && ruleset.Parts.Count > 0)
                 {
                     foreach (var subPart in ruleset.Parts)
                     {
-                        GetIgnoreableRules(availableClasses, availableIds, availableTags, ignoreableRulesets, subPart);
+                        GetIgnoreableOrModifiedRules(availableClasses, availableIds, availableTags, ignoreableRulesets, subPart);
                     }
                 }
             }
@@ -325,7 +331,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             return ignoreableRulesets;
         }
 
-        private void GetIgnoreableRules(List<string> availableClasses, List<string> availableIds, List<string> availableTags, List<ContentPart> ignoreableRulesets, ContentPart part)
+        private void GetIgnoreableOrModifiedRules(List<string> availableClasses, List<string> availableIds, List<string> availableTags, List<ContentPart> ignoreableRulesets, ContentPart part)
         {
             var ruleset = part as ContentRuleset;
             if (ruleset == null)
@@ -418,6 +424,44 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
             else if (selectors.Any(s => !s.Used))
             {
                 // remove specific selector
+                var replacedRuleSet = new ContentReplacedRuleset();
+                replacedRuleSet.ReplacedContent = replacedRuleSet.Content = ruleset.Content;
+                replacedRuleSet.EndIndex = ruleset.EndIndex;
+                replacedRuleSet.Parts = ruleset.Parts;
+                replacedRuleSet.ReplacedSelectorList = replacedRuleSet.SelectorList = ruleset.SelectorList;
+                replacedRuleSet.StartIndex = ruleset.StartIndex;
+                replacedRuleSet.Type = ruleset.Type;
+
+                var tmpSelectors = new List<ContentSelector>(selectors);
+                tmpSelectors.Reverse();
+
+                foreach (var selector in tmpSelectors)
+                {
+                    if (!selector.Used)
+                    {
+                        var length = selector.EndIndex - selector.StartIndex;
+                        replacedRuleSet.ReplacedSelectorList = replacedRuleSet.ReplacedSelectorList.Remove(selector.StartIndex, length).Insert(selector.StartIndex, " ".PadRight(length));
+
+                        var seperatorIndex = selector.StartIndex - 1;
+                        if (selector.StartIndex == 0)
+                        {
+                            seperatorIndex = selector.StartIndex + length;
+                        }
+                        if (replacedRuleSet.ReplacedSelectorList.Length > seperatorIndex && replacedRuleSet.ReplacedSelectorList[seperatorIndex] == ',')
+                        {
+                            replacedRuleSet.ReplacedSelectorList = replacedRuleSet.ReplacedSelectorList.Remove(seperatorIndex, 1);
+                        }
+                    }
+                }
+
+                replacedRuleSet.ReplacedSelectorList = replacedRuleSet.ReplacedSelectorList.Trim();
+                if (replacedRuleSet.ReplacedSelectorList.StartsWith(","))
+                {
+                    replacedRuleSet.ReplacedSelectorList = replacedRuleSet.ReplacedSelectorList.Remove(0, 1);
+                }
+
+                replacedRuleSet.ReplacedContent = replacedRuleSet.ReplacedContent.Replace(replacedRuleSet.SelectorList, replacedRuleSet.ReplacedSelectorList);
+                ignoreableRulesets.Add(replacedRuleSet);
             }
         }
 
@@ -529,11 +573,7 @@ namespace StaticWebEpiserverPlugin.RequiredCssOnly.Services
 
         private bool HasCssClass(string className, List<string> availableClasses)
         {
-            string classNameWithEndingSpace = className + " ";
-            string classNameWithStartingSpace = " " + className;
-            string classNameSurroundedWithSpace = " " + className + " ";
-
-            return availableClasses.Any(classNames => classNames.Equals(className));
+            return availableClasses.Contains(className);
         }
     }
 }
